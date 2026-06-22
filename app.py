@@ -20,6 +20,10 @@ import matplotlib.pyplot as plt
 # -----------------------------
 st.set_page_config(page_title="FlightFareAI Pro", layout="wide", initial_sidebar_state="expanded")
 
+# Initialize session state keys used for navigation
+if 'nav_to' not in st.session_state:
+    st.session_state['nav_to'] = None
+
 # Load local CSS for dark glassmorphism UI
 def load_css():
     css_path = os.path.join('assets', 'styles.css')
@@ -316,7 +320,9 @@ def page_dashboard():
     col4.metric('Last Update', 'See repo')
     st.markdown('Quick actions')
     if st.button('Open Predict Page'):
-        st.experimental_set_query_params(page='predict')
+        # Use session_state navigation instead of experimental_set_query_params to avoid AttributeError
+        st.session_state['nav_to'] = 'Predict Flights'
+        st.experimental_rerun()
 
 
 def page_analytics():
@@ -374,7 +380,12 @@ def page_about():
 def main():
     st.sidebar.title('FlightFareAI Pro')
     st.sidebar.markdown('Dark • Modern • AI-backed')
-    page = st.sidebar.radio('Navigation', ['Dashboard', 'Predict Flights', 'Analytics', 'Recommendations', 'About'])
+
+    # Standard radio navigation
+    radio_choice = st.sidebar.radio('Navigation', ['Dashboard', 'Predict Flights', 'Analytics', 'Recommendations', 'About'])
+
+    # If a page navigation override was set in session_state (e.g., from a page button), honor it
+    page = st.session_state.pop('nav_to') if st.session_state.get('nav_to') else radio_choice
 
     if page == 'Dashboard':
         page_dashboard()
