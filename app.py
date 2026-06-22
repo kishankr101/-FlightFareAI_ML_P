@@ -55,25 +55,35 @@ def load_model_and_encoder() -> Tuple[object, object, bool]:
     """Try to load model and encoder. Returns (model, encoder, success_flag).
     If files are missing or loading fails, returns (None, None, False).
     Uses lazy imports so the app can run in demo mode even if heavy ML packages are not installed.
+    Additionally falls back to models/demo_model.DemoModel and DemoEncoder when available.
     """
     try:
         # Lazy import joblib to avoid ModuleNotFoundError on import time in environments where
-        # scikit-learn/joblib aren't installed. If joblib is missing we return None and run demo mode.
+        # scikit-learn/joblib aren't installed. If joblib is missing we fall back to demo model.
         try:
             import joblib
+            have_joblib = True
         except Exception:
-            st.warning("joblib not installed in the environment; running in demo mode.")
-            return None, None, False
+            have_joblib = False
 
-        if os.path.exists(MODEL_PATH) and os.path.exists(ENCODER_PATH):
+        # If model files exist and joblib is available, try to load them
+        if have_joblib and os.path.exists(MODEL_PATH) and os.path.exists(ENCODER_PATH):
             try:
                 model = joblib.load(MODEL_PATH)
                 encoder = joblib.load(ENCODER_PATH)
                 return model, encoder, True
             except Exception as e:
                 st.warning(f"Failed to load model/encoder: {e}")
-                return None, None, False
-        else:
+                # fall through to demo model
+
+        # Next fallback: if a demo_model module exists in models/, import it and use
+        try:
+            from models.demo_model import DemoModel, DemoEncoder
+            demo_encoder = DemoEncoder()
+            demo_model = DemoModel()
+            return demo_model, demo_encoder, True
+        except Exception:
+            # Final fallback: indicate no model available; app will use pure demo_predict_all
             return None, None, False
     except Exception as e:
         # Unexpected errors should not crash the app; fall back to demo mode.
@@ -320,10 +330,14 @@ def page_dashboard():
     col4.metric('Last Update', 'See repo')
     st.markdown('Quick actions')
     if st.button('Open Predict Page'):
-        # Set navigation target in session_state; radio will respect this on the next rerun
+        # Set navigation target in session_state; radio will respect this on the next render
         st.session_state['nav_to'] = 'Predict Flights'
         # No direct rerun call to maintain compatibility across Streamlit runtimes
-        st.experimental_rerun()
+        # some runtimes restrict experimental_rerun; avoid calling it here
+        try:
+            st.experimental_rerun()
+        except Exception:
+            pass
 
 
 def page_analytics():
@@ -385,17 +399,27 @@ def main():
     options = ['Dashboard', 'Predict Flights', 'Analytics', 'Recommendations', 'About']
 
     # If a page navigation override was set in session_state (e.g., from a page button), use it as the default index
-    nav_target = st.session_state.get('nav_to')
+    try:
+        nav_target = st.session_state.get('nav_to')
+    except Exception:
+        nav_target = None
+
     try:
         default_index = options.index(nav_target) if nav_target in options else 0
     except Exception:
         default_index = 0
 
-    radio_choice = st.sidebar.radio('Navigation', options, index=default_index)
+    try:
+        radio_choice = st.sidebar.radio('Navigation', options, index=default_index)
+    except Exception:
+        radio_choice = st.sidebar.radio('Navigation', options)
 
     # Clear the nav override once consumed
-    if nav_target in options:
-        st.session_state['nav_to'] = None
+    try:
+        if nav_target in options:
+            st.session_state['nav_to'] = None
+    except Exception:
+        pass
 
     page = radio_choice
 
