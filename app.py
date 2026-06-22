@@ -320,8 +320,9 @@ def page_dashboard():
     col4.metric('Last Update', 'See repo')
     st.markdown('Quick actions')
     if st.button('Open Predict Page'):
-        # Use session_state navigation instead of experimental_set_query_params to avoid AttributeError
+        # Set navigation target in session_state; radio will respect this on the next rerun
         st.session_state['nav_to'] = 'Predict Flights'
+        # No direct rerun call to maintain compatibility across Streamlit runtimes
         st.experimental_rerun()
 
 
@@ -381,11 +382,22 @@ def main():
     st.sidebar.title('FlightFareAI Pro')
     st.sidebar.markdown('Dark • Modern • AI-backed')
 
-    # Standard radio navigation
-    radio_choice = st.sidebar.radio('Navigation', ['Dashboard', 'Predict Flights', 'Analytics', 'Recommendations', 'About'])
+    options = ['Dashboard', 'Predict Flights', 'Analytics', 'Recommendations', 'About']
 
-    # If a page navigation override was set in session_state (e.g., from a page button), honor it
-    page = st.session_state.pop('nav_to') if st.session_state.get('nav_to') else radio_choice
+    # If a page navigation override was set in session_state (e.g., from a page button), use it as the default index
+    nav_target = st.session_state.get('nav_to')
+    try:
+        default_index = options.index(nav_target) if nav_target in options else 0
+    except Exception:
+        default_index = 0
+
+    radio_choice = st.sidebar.radio('Navigation', options, index=default_index)
+
+    # Clear the nav override once consumed
+    if nav_target in options:
+        st.session_state['nav_to'] = None
+
+    page = radio_choice
 
     if page == 'Dashboard':
         page_dashboard()
