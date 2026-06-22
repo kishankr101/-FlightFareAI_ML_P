@@ -320,24 +320,76 @@ def page_predict():
 
 
 def page_dashboard():
-    st.title('Dashboard')
-    st.markdown('Overview metrics and quick access to predictions and recommendations.')
-    # Small set of metric cards
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric('Total Airlines', '8')
-    col2.metric('Demo Mode', 'Enabled' if not os.path.exists(MODEL_PATH) else 'Disabled')
-    col3.metric('Default Branch', 'main')
-    col4.metric('Last Update', 'See repo')
-    st.markdown('Quick actions')
-    if st.button('Open Predict Page'):
-        # Set navigation target in session_state; radio will respect this on the next render
-        st.session_state['nav_to'] = 'Predict Flights'
-        # No direct rerun call to maintain compatibility across Streamlit runtimes
-        # some runtimes restrict experimental_rerun; avoid calling it here
-        try:
-            st.experimental_rerun()
-        except Exception:
-            pass
+    # Modern hero and metric layout
+    st.markdown(
+        """
+        <div class='hero'>
+          <div style='flex:1'>
+            <div style='display:flex; gap:12px; align-items:center'>
+              <div class='icon-circle'>✈️</div>
+              <div>
+                <div class='title'>FlightFareAI Pro</div>
+                <div class='subtitle'>Predict domestic flight prices and find the best deals across airlines.</div>
+              </div>
+            </div>
+            <div style='margin-top:14px'>
+              <span class='badge'>Dark • Modern • AI-backed</span>
+            </div>
+          </div>
+          <div style='display:flex; gap:10px; align-items:center'>
+            <a class='cta-btn' href=''>Open Predict Page</a>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Metrics grid
+    model_exists = os.path.exists(MODEL_PATH)
+    demo_mode = not model_exists
+
+    metrics_html = f"""
+    <div class='metrics-grid'>
+      <div class='metric-card'>
+        <div class='metric-title'>Total Airlines</div>
+        <div class='metric-value'>8</div>
+        <div class='metric-delta'>Top carriers included</div>
+      </div>
+      <div class='metric-card'>
+        <div class='metric-title'>Demo Mode</div>
+        <div class='metric-value'>{'Enabled' if demo_mode else 'Disabled'}</div>
+        <div class='metric-delta'>{'Using demo model' if demo_mode else 'Using uploaded model'}</div>
+      </div>
+      <div class='metric-card'>
+        <div class='metric-title'>Default Branch</div>
+        <div class='metric-value'>main</div>
+        <div class='metric-delta'>Repository</div>
+      </div>
+      <div class='metric-card'>
+        <div class='metric-title'>Last Update</div>
+        <div class='metric-value'>See repo</div>
+        <div class='metric-delta'>Pushes to main</div>
+      </div>
+    </div>
+    """
+
+    st.markdown(metrics_html, unsafe_allow_html=True)
+
+    st.markdown('<br/>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class='glass'>
+      <div style='display:flex; justify-content:space-between; align-items:center'>
+        <div>
+          <strong>Quick actions</strong>
+          <div style='color:var(--muted); margin-top:6px'>Jump to predictions or upload your model files.</div>
+        </div>
+        <div style='display:flex; gap:10px'>
+          <a href='' class='cta-btn'>Find Best Flights</a>
+          <a href='https://github.com/kishankr101/-FlightFareAI_ML_P' target='_blank' class='cta-btn' style='background:linear-gradient(90deg,#2dd4bf,#60a5fa);'>Open Repo</a>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def page_recommendations():
