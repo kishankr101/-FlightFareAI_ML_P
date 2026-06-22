@@ -321,7 +321,7 @@ def page_predict():
 
 def page_dashboard():
     st.title('Dashboard')
-    st.markdown('Overview metrics and quick access to predictions and analytics.')
+    st.markdown('Overview metrics and quick access to predictions and recommendations.')
     # Small set of metric cards
     col1, col2, col3, col4 = st.columns(4)
     col1.metric('Total Airlines', '8')
@@ -338,26 +338,6 @@ def page_dashboard():
             st.experimental_rerun()
         except Exception:
             pass
-
-
-def page_analytics():
-    st.title('Analytics')
-    st.markdown('Analytics and visualizations (demo data).')
-    # Demo analytics using synthetic sample
-    sample = []
-    for a in DEFAULT_AIRLINES:
-        for c in CLASS_OPTIONS:
-            sample.append({'Airline':a, 'Class':c, 'Price': np.random.randint(2000,10000)})
-    df = pd.DataFrame(sample)
-    st.subheader('Price distribution by Airline')
-    fig = px.box(df, x='Airline', y='Price', color='Airline')
-    st.plotly_chart(fig, use_container_width=True)
-    st.subheader('Class comparison')
-    fig2 = px.violin(df, x='Class', y='Price', color='Class', box=True)
-    st.plotly_chart(fig2, use_container_width=True)
-
-    st.subheader('Model performance metrics')
-    st.write('No ground-truth labels in the app. If you upload evaluation data, model metrics will appear here.')
 
 
 def page_recommendations():
@@ -396,7 +376,7 @@ def main():
     st.sidebar.title('FlightFareAI Pro')
     st.sidebar.markdown('Dark • Modern • AI-backed')
 
-    options = ['Dashboard', 'Predict Flights', 'Analytics', 'Recommendations', 'About']
+    options = ['Dashboard', 'Predict Flights', 'Recommendations', 'About']
 
     # If a page navigation override was set in session_state (e.g., from a page button), use it as the default index
     try:
@@ -427,8 +407,6 @@ def main():
         page_dashboard()
     elif page == 'Predict Flights':
         page_predict()
-    elif page == 'Analytics':
-        page_analytics()
     elif page == 'Recommendations':
         page_recommendations()
     elif page == 'About':
