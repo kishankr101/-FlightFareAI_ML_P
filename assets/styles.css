@@ -1,0 +1,40 @@
+/* Dark glassmorphism styles for FlightFareAI Pro */
+
+:root{
+    --bg: #0f1724;
+    --card-bg: rgba(255,255,255,0.03);
+    --accent: linear-gradient(90deg,#06b6d4,#7c3aed);
+    --glass-border: rgba(255,255,255,0.06);
+}
+
+body, .stApp{
+    background: var(--bg) !important;
+    color: #e6eef8 !important;
+}
+
+.glass{
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 4px 30px rgba(0,0,0,0.5);
+}
+
+h1, h2, h3, h4{
+    color: #e6eef8;
+}
+
+.stButton>button{
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 10px;
+}
+
+.stMetricValue, .stMetricDelta {
+    color: #e6eef8 !important;
+}
+
+/* Hover effect for table rows (works on some components) */
+.table-hover tr:hover{ background: rgba(255,255,255,0.02); }
