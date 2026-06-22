@@ -7,7 +7,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
+#import joblib  # moved to lazy import inside loader
 import os
 import time
 from typing import Tuple, List, Dict
@@ -50,16 +50,30 @@ ENCODER_PATH = os.path.join('models', 'encoder.pkl')
 def load_model_and_encoder() -> Tuple[object, object, bool]:
     """Try to load model and encoder. Returns (model, encoder, success_flag).
     If files are missing or loading fails, returns (None, None, False).
+    Uses lazy imports so the app can run in demo mode even if heavy ML packages are not installed.
     """
     try:
+        # Lazy import joblib to avoid ModuleNotFoundError on import time in environments where
+        # scikit-learn/joblib aren't installed. If joblib is missing we return None and run demo mode.
+        try:
+            import joblib
+        except Exception:
+            st.warning("joblib not installed in the environment; running in demo mode.")
+            return None, None, False
+
         if os.path.exists(MODEL_PATH) and os.path.exists(ENCODER_PATH):
-            model = joblib.load(MODEL_PATH)
-            encoder = joblib.load(ENCODER_PATH)
-            return model, encoder, True
+            try:
+                model = joblib.load(MODEL_PATH)
+                encoder = joblib.load(ENCODER_PATH)
+                return model, encoder, True
+            except Exception as e:
+                st.warning(f"Failed to load model/encoder: {e}")
+                return None, None, False
         else:
             return None, None, False
     except Exception as e:
-        st.error(f"Error loading model/encoder: {e}")
+        # Unexpected errors should not crash the app; fall back to demo mode.
+        st.warning(f"Error while checking model files: {e}")
         return None, None, False
 
 
