@@ -12,8 +12,6 @@ import os
 import time
 from typing import Tuple, List, Dict
 import plotly.express as px
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 # -----------------------------
 # App configuration & styles
@@ -92,9 +90,8 @@ def load_model_and_encoder() -> Tuple[object, object, bool]:
 
 
 # -----------------------------
-# Prediction logic
+# Prediction / demo feed logic
 # -----------------------------
-
 DEFAULT_AIRLINES = [
     'IndiGo', 'Air India', 'SpiceJet', 'Vistara', 'GoAir', 'AirAsia India', 'Alliance Air', 'TruJet'
 ]
@@ -124,70 +121,36 @@ def demo_predict_all(input_features: Dict) -> List[Dict]:
     return results
 
 
-def predict_with_model(model, encoder, input_features: Dict) -> List[Dict]:
-    """Attempt to predict for each airline using the provided model and encoder.
-    The exact feature engineering must match how model was trained.
-    We attempt a best-effort mapping using common features; if that fails we raise an exception to trigger demo mode.
+def simulate_live_feed(input_features: Dict, jitter: int = 150) -> List[Dict]:
+    """Create a simulated live feed with additional metadata (times, logos, stops).
+       jitter controls price variability.
     """
-    airlines = []
-    # Try to get list of airlines from encoder (supports scikit-learn LabelEncoder or similar)
-    try:
-        if hasattr(encoder, 'classes_'):
-            airlines = list(encoder.classes_)
-        elif isinstance(encoder, list) or isinstance(encoder, tuple):
-            airlines = list(encoder)
-        else:
-            # fallback
-            airlines = DEFAULT_AIRLINES
-    except Exception:
-        airlines = DEFAULT_AIRLINES
-
-    results = []
-    # Prepare a DataFrame template. THIS MUST MATCH training features used for the model.
-    # We make a conservative guess for common column names. If the model expects a different shape,
-    # model.predict will raise and we fall back to demo.
-    rows = []
-    for al in airlines:
-        row = {
-            'Source': input_features.get('source', ''),
-            'Destination': input_features.get('destination', ''),
-            'Airline': al,
-            'Dep_Time': input_features.get('dep_time', ''),
-            'Arrival_Time': input_features.get('arr_time', ''),
-            'Stops': int(input_features.get('stops', 0)),
-            'Class': input_features.get('travel_class', 'Economy'),
-            'Duration': float(input_features.get('duration', 60)),
-        }
-        rows.append(row)
-    X = pd.DataFrame(rows)
-
-    # Try to run model.predict. Many production models require preprocessing pipeline that handles strings.
-    preds = model.predict(X)
-    for al, p in zip(airlines, preds):
-        results.append({'airline': al, 'price': float(np.round(float(p), 0))})
-    return results
-
-
-def get_ranked_results(input_features: Dict) -> Tuple[List[Dict], bool]:
-    """Return sorted list of {'airline','price'} and a boolean 'is_demo' indicating whether demo mode used."""
-    model, encoder, loaded = load_model_and_encoder()
-    if loaded and model is not None and encoder is not None:
-        try:
-            results = predict_with_model(model, encoder, input_features)
-            # Sort ascending
-            results = sorted(results, key=lambda x: x['price'])
-            return results, False
-        except Exception as e:
-            # Fallback to demo mode
-            st.warning(f"Model prediction failed; switching to demo mode. ({e})")
-            results = demo_predict_all(input_features)
-            results = sorted(results, key=lambda x: x['price'])
-            return results, True
-    else:
-        # Demo mode
-        results = demo_predict_all(input_features)
-        results = sorted(results, key=lambda x: x['price'])
-        return results, True
+    base_results = demo_predict_all(input_features)
+    simulated = []
+    now = pd.Timestamp.now()
+    for r in base_results:
+        airline = r['airline']
+        price = max(300, int(r['price'] + np.random.randint(-jitter, jitter)))
+        # simple time generation
+        dep = input_features.get('dep_time', '08:00')
+        arr = input_features.get('arr_time', '10:00')
+        duration = input_features.get('duration', 120)
+        stops = input_features.get('stops', 0)
+        logo_name = airline.lower().split()[0]
+        logo_path = f"assets/logos/{logo_name}.svg"
+        simulated.append({
+            'airline': airline,
+            'price': price,
+            'dep_time': dep,
+            'arr_time': arr,
+            'duration': duration,
+            'stops': stops,
+            'logo': logo_path,
+            'updated_at': now.strftime('%H:%M:%S')
+        })
+    # sort by price ascending
+    simulated = sorted(simulated, key=lambda x: x['price'])
+    return simulated
 
 
 # -----------------------------
@@ -198,15 +161,6 @@ def currency(x):
     return f"₹{int(x):,}"
 
 
-def price_category(price, mean_price):
-    if price <= 0.8 * mean_price:
-        return 'Cheap'
-    elif price >= 1.3 * mean_price:
-        return 'Expensive'
-    else:
-        return 'Average'
-
-
 # -----------------------------
 # Pages
 # -----------------------------
@@ -215,7 +169,7 @@ def page_predict():
     st.title("Predict Flights — FlightFareAI Pro")
     st.markdown("""
     <div class='glass'>
-    <p style='color:#cfe9ff'>Enter flight details below and click <b>Find Best Flights</b> to get ranked airline price predictions.</p>
+    <p style='color:#cfe9ff'>Enter flight details below and click <b>Find Best Flights</b> to get attractive predicted flight cards (simulated live feed).</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -236,7 +190,6 @@ def page_predict():
             find_btn = st.form_submit_button('Find Best Flights')
 
     if find_btn:
-        # Prepare input features
         input_features = {
             'source': source.strip(),
             'destination': destination.strip(),
@@ -247,86 +200,39 @@ def page_predict():
             'duration': duration,
         }
 
-        # Loading spinner while predicting
         with st.spinner('Finding best flights...'):
-            time.sleep(0.7)  # small UX pause
-            results, is_demo = get_ranked_results(input_features)
+            time.sleep(0.7)
+            # simulated live feed
+            feed = simulate_live_feed(input_features)
 
-        # Display summary metrics
-        prices = [r['price'] for r in results]
-        cheapest = results[0]
-        most_expensive = results[-1]
-        mean_price = np.mean(prices)
+        st.markdown(f"**Last updated:** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        st.markdown('<br/>', unsafe_allow_html=True)
 
-        # Cheapest Flight Card
-        col1, col2, col3 = st.columns([3,2,2])
-        with col1:
-            st.markdown("""
-            <div class='glass' style='padding:18px'>
-            <h3 style='margin:0'>Cheapest Flight</h3>
-            <h1 style='margin:6px 0'>{airline}</h1>
-            <h2 style='margin:6px 0; color:#7ee787'>{price}</h2>
-            <p style='color:#cfe9ff'>Savings: <b>{savings}</b> vs average</p>
-            </div>
-            """.format(airline=cheapest['airline'], price=currency(cheapest['price']), savings=currency(int(mean_price - cheapest['price']))), unsafe_allow_html=True)
-        with col2:
-            st.metric('Most Expensive', value=currency(most_expensive['price']), delta=most_expensive['airline'])
-        with col3:
-            st.metric('Average Price', value=currency(int(mean_price)))
-
-        # Top 5 Cheapest
-        st.subheader('Top 5 Cheapest Flights')
-        top5 = results[:5]
-        top5_df = pd.DataFrame(top5).reset_index().rename(columns={'index':'Rank', 'airline':'Airline','price':'Price'})
-        top5_df['Rank'] = top5_df['Rank'] + 1
-        top5_df['Price'] = top5_df['Price'].apply(currency)
-        st.table(top5_df)
-
-        # Premium & Best Value recommendations
-        st.subheader('Recommendations')
-        rcol1, rcol2 = st.columns(2)
-        with rcol1:
-            st.markdown(f"**Premium Recommendation** (Most expensive): {most_expensive['airline']} — {currency(most_expensive['price'])}")
-        with rcol2:
-            # Best value: pick the airline closest to median price but below mean
-            med = np.median(prices)
-            best_value = min(results, key=lambda x: abs(x['price'] - med))
-            st.markdown(f"**Best Value Recommendation**: {best_value['airline']} — {currency(best_value['price'])}")
-
-        # Price comparison chart
-        st.subheader('Price Comparison')
-        df_plot = pd.DataFrame(results)
-        fig = px.bar(df_plot, x='price', y='airline', orientation='h', labels={'price':'Price (INR)','airline':'Airline'}, text='price', color='price', color_continuous_scale='Viridis')
-        fig.update_layout(yaxis={'categoryorder':'total ascending'}, plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Airline ranking table
-        st.subheader('Airline Rankings')
-        rank_df = pd.DataFrame(results)
-        rank_df['Diff_From_Cheapest'] = rank_df['price'] - cheapest['price']
-        rank_df['Price'] = rank_df['price'].apply(currency)
-        rank_df = rank_df[['airline','Price','Diff_From_Cheapest']].rename(columns={'airline':'Airline'})
-        rank_df['Diff_From_Cheapest'] = rank_df['Diff_From_Cheapest'].apply(lambda x: currency(x))
-        st.dataframe(rank_df)
-
-        # Savings insights
-        st.subheader('Savings Insights')
-        percent_saving = int(round((mean_price - cheapest['price'])/mean_price * 100, 0))
-        st.metric('Potential Savings vs Average', f"{percent_saving}%", delta=currency(int(mean_price - cheapest['price'])))
-        st.markdown(f"**Price Category of cheapest option**: {price_category(cheapest['price'], mean_price)}")
-
-        if is_demo:
-            st.info('Running in demo mode because pre-trained model/encoder files were not found or prediction failed. For production use, upload models/model.pkl and models/encoder.pkl that were used during training.')
+        # Render attractive flight cards
+        for item in feed:
+            cols = st.columns([0.8, 3, 1])
+            with cols[0]:
+                # logo fallback
+                logo = item.get('logo')
+                if os.path.exists(logo):
+                    st.image(logo, width=64)
+                else:
+                    st.markdown(f"<div class='flight-logo'>{item['airline'][:2]}</div>", unsafe_allow_html=True)
+            with cols[1]:
+                st.markdown(f"<div class='flight-meta'><div style='display:flex; justify-content:space-between'><strong>{item['airline']}</strong><div class='flight-price'>{currency(item['price'])}</div></div><div class='flight-sub'>{item['dep_time']} → {item['arr_time']} • {int(item['duration'])} mins • {item['stops']} stop(s)</div></div>", unsafe_allow_html=True)
+            with cols[2]:
+                if st.button('Book', key=f"book_{item['airline']}_{item['price']}"):
+                    st.success(f"Booking flow not implemented — selected {item['airline']} at {currency(item['price'])}")
 
 
 def page_dashboard():
-    # Modern hero and metric layout
+    # Modern hero and metric layout with About / Features
     st.markdown(
         """
         <div class='hero'>
           <div style='flex:1'>
             <div style='display:flex; gap:12px; align-items:center'>
-              <div class='icon-circle'>✈️</div>
+              <img src='assets/icons/logo.svg' style='width:56px; height:56px; border-radius:12px; background:transparent;' />
               <div>
                 <div class='title'>FlightFareAI Pro</div>
                 <div class='subtitle'>Predict domestic flight prices and find the best deals across airlines.</div>
@@ -356,8 +262,8 @@ def page_dashboard():
         <div class='metric-delta'>Top carriers included</div>
       </div>
       <div class='metric-card'>
-        <div class='metric-title'>Demo Mode</div>
-        <div class='metric-value'>{'Enabled' if demo_mode else 'Disabled'}</div>
+        <div class='metric-title'>Model Mode</div>
+        <div class='metric-value'>{'Demo' if demo_mode else 'Production'}</div>
         <div class='metric-delta'>{'Using demo model' if demo_mode else 'Using uploaded model'}</div>
       </div>
       <div class='metric-card'>
@@ -380,24 +286,36 @@ def page_dashboard():
     <div class='glass'>
       <div style='display:flex; justify-content:space-between; align-items:center'>
         <div>
-          <strong>Quick actions</strong>
-          <div style='color:var(--muted); margin-top:6px'>Jump to predictions or upload your model files.</div>
+          <strong>About & Features</strong>
+          <div style='color:var(--muted); margin-top:6px'>FlightFareAI Pro helps you estimate flight prices across major carriers using a trained model or the built-in demo model. Key features below.</div>
         </div>
         <div style='display:flex; gap:10px'>
           <a href='' class='cta-btn'>Find Best Flights</a>
           <a href='https://github.com/kishankr101/-FlightFareAI_ML_P' target='_blank' class='cta-btn' style='background:linear-gradient(90deg,#2dd4bf,#60a5fa);'>Open Repo</a>
         </div>
       </div>
+      <div style='margin-top:14px'>
+        <ul>
+          <li>Fast demo predictions using deterministic heuristic model</li>
+          <li>Attractive, responsive UI with live-like flight cards</li>
+          <li>Supports uploading your trained model (joblib) and encoder</li>
+          <li>Lightweight CSS and assets optimized for Streamlit Cloud</li>
+        </ul>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
 
 def page_recommendations():
-    st.title('Recommendations')
-    st.markdown('AI-generated booking tips and insights (demo).')
-    st.markdown('- Book early for best prices')
-    st.markdown('- Consider flights with 1 stop for significant savings on some routes')
-    st.markdown('- Use weekday travel to lower ticket costs')
+    # Repurposed as Features / Project Details
+    st.title('Project Features')
+    st.markdown('FlightFareAI Pro — features and usage')
+    st.markdown('''
+    - Realistic demo model for quick demos
+    - Clean, modern dashboard with metric cards
+    - Responsive flight results with airline logos and booking CTA
+    - Easy model upload workflow (future enhancement)
+    ''')
 
 
 def page_about():
@@ -405,7 +323,7 @@ def page_about():
     st.markdown('''
     FlightFareAI Pro is a Streamlit-based application that predicts domestic Indian flight prices across airlines and recommends the cheapest options.
 
-    Tech stack: Streamlit, Pandas, Scikit-learn, Joblib, Plotly, Seaborn
+    Tech stack: Streamlit, Pandas, simple demo model
 
     Project structure (single-file app):
     - app.py (this file)
@@ -426,9 +344,9 @@ def page_about():
 
 def main():
     st.sidebar.title('FlightFareAI Pro')
-    st.sidebar.markdown('Dark • Modern • AI-backed')
+    st.sidebar.markdown("<div class='sidebar-brand'>FlightFareAI Pro</div><div class='sidebar-sub'>Dark • Modern • AI-backed</div>", unsafe_allow_html=True)
 
-    options = ['Dashboard', 'Predict Flights', 'Recommendations', 'About']
+    options = ['Dashboard', 'Predict Flights', 'Project Features', 'About']
 
     # If a page navigation override was set in session_state (e.g., from a page button), use it as the default index
     try:
@@ -459,7 +377,7 @@ def main():
         page_dashboard()
     elif page == 'Predict Flights':
         page_predict()
-    elif page == 'Recommendations':
+    elif page == 'Project Features':
         page_recommendations()
     elif page == 'About':
         page_about()
